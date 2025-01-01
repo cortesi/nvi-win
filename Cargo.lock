@@ -613,12 +613,9 @@ dependencies = [
 [[package]]
 name = "mrpc"
 version = "0.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f84bbc74954bac7119396736ac220c334055566ff738e80f31b7931a8dab1d4"
 dependencies = [
  "async-trait",
  "bytes",
- "rmp",
  "rmpv",
  "thiserror",
  "tokio",

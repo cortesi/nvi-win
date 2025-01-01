@@ -1,8 +1,14 @@
 use anyhow::{anyhow, Result};
-use nvi::nvi_macros::*;
-use nvi::types::{Border, Relative, TabPage, Window, WindowConf};
-use tracing::debug;
 
+use nvi::{
+    input, lua_exec,
+    nvi_macros::*,
+    nvim::types::{Border, Relative, TabPage, Window, WindowConf},
+};
+
+use tracing::trace;
+
+mod demos;
 #[cfg(test)]
 mod tests;
 
@@ -17,7 +23,7 @@ struct NviWin {
     keys: String,
 }
 
-#[nvi_service]
+#[nvi_plugin]
 impl NviWin {
     fn new() -> Self {
         NviWin {
@@ -40,11 +46,9 @@ impl NviWin {
                     -1,
                     false,
                     vec![
-                        "".to_string(),
-                        "   ".to_string(),
-                        key.to_string(),
-                        "   ".to_string(),
-                        "".to_string(),
+                        "  ".to_string(),
+                        format!("  {}", key.to_string()),
+                        "  ".to_string(),
                     ],
                 )
                 .await?;
@@ -66,8 +70,8 @@ impl NviWin {
                     WindowConf::default()
                         .relative(Relative::Win)
                         .win(w.clone())
-                        .row(row as u64)
-                        .col(col as u64)
+                        .row(row)
+                        .col(col)
                         .width(FLOAT_WIDTH as u64)
                         .height(FLOAT_HEIGHT as u64)
                         .style("minimal".to_string())
@@ -76,40 +80,39 @@ impl NviWin {
                         .focusable(false),
                 )
                 .await?;
-            float_win
-                .set(client, "winhl", format!("Normal:{}", DEFAULT_NORMAL_HL))
-                .await?;
+            // float_win
+            //     .set(client, "winhl", format!("Normal:{}", DEFAULT_NORMAL_HL))
+            //     .await?;
             float_win.set(client, "diff", false).await?;
         }
-        client.lua("vim.cmd('redraw')").await?;
+        lua_exec!(client, "vim.cmd('redraw')").await?;
         Ok(())
+    }
+
+    async fn windows(&self, client: &mut nvi::Client) -> Result<Vec<Window>> {
+        let current = client.nvim.get_current_win().await?;
+        let mut ret = vec![];
+        for w in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
+            if w == current {
+                continue;
+            }
+            let cnf = client.nvim.win_get_config(&w).await?;
+            if cnf.relative.is_some() {
+                continue;
+            }
+            ret.push(w);
+        }
+        Ok(ret)
     }
 
     /// Pick a window, and return the window ID. If there's only one window, return that window
     /// immediately. Otherwise, display an overlay and ask the user for input.
     #[request]
     async fn pick(&self, client: &mut nvi::Client) -> Result<Window> {
-        let current = client.nvim.get_current_win().await?;
-        let windows = client
-            .nvim
-            .tabpage_list_wins(&TabPage::current())
-            .await?
-            .into_iter()
-            .filter(|w| w != &current)
-            .collect::<Vec<_>>();
-
+        let windows = self.windows(client).await?;
         self.show_hints(client, windows.clone()).await?;
-
-        let c = client
-            .lua("return vim.fn.nr2char(vim.fn.getchar())")
-            .await?
-            .as_str()
-            .ok_or(anyhow!("no char"))?
-            .chars()
-            .next()
-            .ok_or(anyhow!("no char"))?;
-
-        let offset = self.keys.find(c).unwrap_or(0);
+        let c = input::get_keypress(client).await?;
+        let offset = self.keys.find(&c.key.to_string()).unwrap_or(0);
         if offset >= windows.len() {
             return Err(anyhow!("invalid window"));
         }
@@ -120,17 +123,21 @@ impl NviWin {
     #[request]
     async fn jump(&self, client: &mut nvi::Client) -> Result<()> {
         let window = self.pick(client).await?;
+        client
+            .info(&format!("jumping to window {}", window))
+            .await?;
         client.nvim.set_current_win(&window).await?;
         Ok(())
     }
 
-    async fn connected(&self, _client: &mut nvi::Client) -> nvi::error::Result<()> {
-        debug!("nvi_win connected");
+    async fn connected(&mut self, _client: &mut nvi::Client) -> nvi::error::Result<()> {
+        trace!("nvi_win connected");
         Ok(())
     }
 }
 
 #[tokio::main]
-async fn main() {
-    nvi::cmd::run(NviWin::new()).await;
+async fn main() -> Result<()> {
+    nvi::cmd::run(NviWin::new(), Some(demos::demos())).await?;
+    Ok(())
 }

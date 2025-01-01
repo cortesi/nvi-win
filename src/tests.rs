@@ -8,7 +8,8 @@ async fn startup() {
     let nvit = NviTest::builder()
         .show_logs()
         .log_level(tracing::Level::DEBUG)
-        .run(NviWin::new())
+        .with_plugin(NviWin::new())
+        .run()
         .await
         .unwrap();
 
@@ -18,9 +19,6 @@ async fn startup() {
         .unwrap();
 
     let current = nvit.client.nvim.get_current_win().await.unwrap();
-
-    nvit.await_log("nvi_win connected").await.unwrap();
-
     let result = nvit
         .concurrent(
             |c| async move { c.lua("return nvi_win.pick()").await }.boxed(),
@@ -38,7 +36,8 @@ async fn pick() {
     let nvit = NviTest::builder()
         .show_logs()
         .log_level(tracing::Level::DEBUG)
-        .run(NviWin::new())
+        .with_plugin(NviWin::new())
+        .run()
         .await
         .unwrap();
 
@@ -46,8 +45,6 @@ async fn pick() {
         .lua("vim.cmd('vsplit'); vim.cmd('split')")
         .await
         .unwrap();
-
-    nvit.await_log("nvi_win connected").await.unwrap();
 
     let before = nvit.client.nvim.get_current_win().await.unwrap();
     nvit.concurrent(
@@ -61,4 +58,3 @@ async fn pick() {
     assert!(before != after);
     nvit.finish().await.unwrap();
 }
-
