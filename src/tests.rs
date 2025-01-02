@@ -1,5 +1,6 @@
 use futures_util::future::FutureExt;
 use nvi::test::NviTest;
+use nvi::{lua, lua_exec};
 
 use crate::NviWin;
 
@@ -13,21 +14,20 @@ async fn startup() {
         .await
         .unwrap();
 
-    nvit.client
-        .lua("vim.cmd('vsplit'); vim.cmd('split')")
+    lua_exec!(nvit.client, "vim.cmd('vsplit'); vim.cmd('split')")
         .await
         .unwrap();
 
     let current = nvit.client.nvim.get_current_win().await.unwrap();
-    let result = nvit
+    let result: u64 = nvit
         .concurrent(
-            |c| async move { c.lua("return nvi_win.pick()").await }.boxed(),
+            |c| async move { lua!(c, "return nvi_win.pick()").await }.boxed(),
             |c| async move { c.nvim.feedkeys("a", "n", false).await }.boxed(),
         )
         .await
         .unwrap();
 
-    assert!(result.as_u64().unwrap() != current.into());
+    assert!(result != current.into());
     nvit.finish().await.unwrap();
 }
 
@@ -41,14 +41,13 @@ async fn pick() {
         .await
         .unwrap();
 
-    nvit.client
-        .lua("vim.cmd('vsplit'); vim.cmd('split')")
+    lua_exec!(nvit.client, "vim.cmd('vsplit'); vim.cmd('split')")
         .await
         .unwrap();
 
     let before = nvit.client.nvim.get_current_win().await.unwrap();
     nvit.concurrent(
-        |c| async move { c.lua("return nvi_win.jump()").await }.boxed(),
+        |c| async move { lua_exec!(c, "return nvi_win.jump()").await }.boxed(),
         |c| async move { c.nvim.feedkeys("a", "n", false).await }.boxed(),
     )
     .await

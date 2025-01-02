@@ -7,8 +7,6 @@ use nvi::{
     ui::pane,
 };
 
-use tracing::trace;
-
 mod demos;
 #[cfg(test)]
 mod tests;
@@ -80,7 +78,7 @@ impl NviWin {
         let c = input::get_keypress(client).await?;
 
         while let Some(p) = self.panes.pop() {
-            p.destroy().await?;
+            p.destroy(client).await?;
         }
 
         if let Some(offset) = self.keys.iter().position(|x| **x == c.key.name()) {
