@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 
 use nvi::{
+    highlights::*,
     input, lua_exec,
     nvi_macros::*,
     nvim::types::{TabPage, Window},
@@ -34,12 +35,17 @@ impl NviWin {
         }
     }
 
+    fn highlights(&self) -> Highlights {
+        Highlights::default().hl("Normal", Hl::default().fg("#ffffff").bg("#215b91"))
+    }
+
     async fn show_hints(&mut self, client: &mut nvi::Client, windows: &[Window]) -> Result<()> {
         for (i, w) in windows.iter().enumerate() {
             let key = self.keys[i].clone();
 
             let pane = pane::Pane::builder()
                 .with_win_pos(w.clone(), pane::Pos::Center, 0)
+                .winhl("Normal", "nvi_winNormal")
                 .build(
                     client,
                     pane::Content::center(FLOAT_WIDTH, FLOAT_HEIGHT, &key.to_string()),
