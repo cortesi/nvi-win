@@ -36,7 +36,7 @@ impl NviWin {
     }
 
     fn highlights(&self) -> Highlights {
-        Highlights::default().hl("Normal", Hl::default().fg("#ffffff").bg("#215b91"))
+        Highlights::default().hl("Window", Hl::default().fg("#ffffff").bg("#215b91"))
     }
 
     async fn show_hints(&mut self, client: &mut nvi::Client, windows: &[Window]) -> Result<()> {
@@ -45,7 +45,7 @@ impl NviWin {
 
             let pane = pane::Pane::builder()
                 .with_win_pos(w.clone(), pane::Pos::Center, 0)
-                .winhl("Normal", "nvi_winNormal")
+                .winhl("Normal", "nvi_winWindow")
                 .build(
                     client,
                     pane::Content::center(FLOAT_WIDTH, FLOAT_HEIGHT, &key.to_string()),
@@ -78,7 +78,7 @@ impl NviWin {
     /// Pick a window, and return the window ID. If there's only one window, return that window
     /// immediately. Otherwise, display an overlay and ask the user for input.
     #[request]
-    async fn pick(&mut self, client: &mut nvi::Client) -> Result<Window> {
+    async fn pick(&mut self, client: &mut nvi::Client) -> Result<Option<Window>> {
         let windows = self.windows(client).await?;
         self.show_hints(client, &windows).await?;
         let c = input::get_keypress(client).await?;
@@ -88,20 +88,22 @@ impl NviWin {
         }
 
         if let Some(offset) = self.keys.iter().position(|x| **x == c.key.name()) {
-            if offset >= windows.len() {
-                return Err(anyhow!("invalid window"));
+            if offset < windows.len() {
+                Ok(Some(windows[offset].clone()))
+            } else {
+                Ok(None)
             }
-            Ok(windows[offset].clone())
         } else {
-            return Ok(client.nvim.get_current_win().await?);
+            Ok(None)
         }
     }
 
     /// Pick a window and jump to it.
     #[request]
     async fn jump(&mut self, client: &mut nvi::Client) -> Result<()> {
-        let window = self.pick(client).await?;
-        client.nvim.set_current_win(&window).await?;
+        if let Some(window) = self.pick(client).await? {
+            client.nvim.set_current_win(&window).await?;
+        }
         Ok(())
     }
 }
