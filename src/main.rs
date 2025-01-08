@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use nvi::{
     highlights::*,
-    input, lua_exec,
+    input,
     nvi_macros::*,
     nvim::types::{TabPage, Window},
     ui::pane,
@@ -12,15 +12,10 @@ mod demos;
 #[cfg(test)]
 mod tests;
 
-const DEFAULT_KEYS: &[&str] = &[
-    "a", "s", "d", "f", "g", "h", "j", "k", "l", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p",
-    "z", "x", "c", "v", "b", "n", "m",
-];
-
+const DEFAULT_KEYS: &str = "asdfghjklqwertyuiopzxcvbnm";
 const FLOAT_WIDTH: usize = 7;
 const FLOAT_HEIGHT: usize = 3;
 
-#[derive(Clone)]
 struct NviWin {
     keys: Vec<String>,
     panes: Vec<pane::Pane>,
@@ -30,7 +25,7 @@ struct NviWin {
 impl NviWin {
     fn new() -> Self {
         NviWin {
-            keys: DEFAULT_KEYS.iter().map(|s| s.to_string()).collect(),
+            keys: DEFAULT_KEYS.chars().map(|c| c.to_string()).collect(),
             panes: vec![],
         }
     }
@@ -53,7 +48,7 @@ impl NviWin {
                 .await?;
             self.panes.push(pane);
         }
-        lua_exec!(client, "vim.cmd('redraw')").await?;
+        client.redraw().await?;
         Ok(())
     }
 
@@ -75,8 +70,9 @@ impl NviWin {
         Ok(ret)
     }
 
-    /// Pick a window, and return the window ID. If there's only one window, return that window
-    /// immediately. Otherwise, display an overlay and ask the user for input.
+    /// Pick a window, and return the window ID. If there's only one window, return that window.
+    /// Otherwise, display an overlay and ask the user for input. If the user presses any key not
+    /// in our shortcut list, cancel the pick operation and return None.
     #[request]
     async fn pick(&mut self, client: &mut nvi::Client) -> Result<Option<Window>> {
         let windows = self.windows(client).await?;

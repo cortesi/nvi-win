@@ -1,14 +1,9 @@
 
 
+# nvi-win
 
-
-
-
-
-
-
-
-
+A simple plugin for window navigation in Neovim. Written in Rust using the
+[Nvi](github.com/cortesi/nvi) framework.
 
 
 
