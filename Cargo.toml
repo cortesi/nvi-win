@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.95"
-futures-util = "0.3.31"
 nvi = { path = "../nvi/crates/nvi" }
+
+anyhow = "1.0.95"
+rand = "0.8.5"
+futures-util = "0.3.31"
 thiserror = "2.0.9"
 tokio = { version = "1.42.0", features = ["full"] }
 tracing = "0.1.41"
-

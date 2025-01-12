@@ -6,6 +6,7 @@ use nvi::{
     nvi_macros::*,
     nvim::types::{TabPage, Window},
     ui::pane,
+    Color,
 };
 
 mod demos;
@@ -30,20 +31,27 @@ impl NviWin {
         }
     }
 
-    fn highlights(&self) -> Highlights {
-        Highlights::default().hl("Window", Hl::default().fg("#ffffff").bg("#215b91"))
+    fn highlights(&self) -> nvi::error::Result<Highlights> {
+        Ok(Highlights::default().hl(
+            "Window",
+            Hl::default().fg(Color::White)?.bg(Color::AzureBlue)?,
+        ))
     }
 
-    async fn show_hints(&mut self, client: &mut nvi::Client, windows: &[Window]) -> Result<()> {
+    async fn show_hints(
+        &mut self,
+        client: &mut nvi::Client,
+        windows: &[Window],
+    ) -> nvi::error::Result<()> {
         for (i, w) in windows.iter().enumerate() {
             let key = self.keys[i].clone();
 
             let pane = pane::Pane::builder()
                 .with_win_pos(w.clone(), pane::Pos::Center, 0)
-                .winhl("Normal", "nvi_winWindow")
+                .winhl("Normal", &client.hl_name("Window")?)
                 .build(
                     client,
-                    pane::Content::center(FLOAT_WIDTH, FLOAT_HEIGHT, &key.to_string()),
+                    pane::Text::center(FLOAT_WIDTH, FLOAT_HEIGHT, &key.to_string()),
                 )
                 .await?;
             self.panes.push(pane);
@@ -54,7 +62,7 @@ impl NviWin {
 
     /// Get the list of windows we need to choose from. Exclude the current window and
     /// floating windows.
-    async fn windows(&self, client: &mut nvi::Client) -> Result<Vec<Window>> {
+    async fn windows(&self, client: &mut nvi::Client) -> nvi::error::Result<Vec<Window>> {
         let current = client.nvim.get_current_win().await?;
         let mut ret = vec![];
         for w in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
@@ -74,7 +82,7 @@ impl NviWin {
     /// Otherwise, display an overlay and ask the user for input. If the user presses any key not
     /// in our shortcut list, cancel the pick operation and return None.
     #[request]
-    async fn pick(&mut self, client: &mut nvi::Client) -> Result<Option<Window>> {
+    async fn pick(&mut self, client: &mut nvi::Client) -> nvi::error::Result<Option<Window>> {
         let windows = self.windows(client).await?;
         self.show_hints(client, &windows).await?;
         let c = input::get_keypress(client).await?;
@@ -96,7 +104,7 @@ impl NviWin {
 
     /// Pick a window and jump to it.
     #[request]
-    async fn jump(&mut self, client: &mut nvi::Client) -> Result<()> {
+    async fn jump(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
         if let Some(window) = self.pick(client).await? {
             client.nvim.set_current_win(&window).await?;
         }
