@@ -34,6 +34,26 @@ pub fn demos() -> Demos {
         }
         Ok(())
     });
+    d.add("nextprev", |c| async move {
+        lua_exec!(
+            c.clone(),
+            "vim.cmd('vsplit'); vim.cmd('split'); vim.cmd('vsplit')"
+        )
+        .await
+        .unwrap();
+
+        for _ in 0..7 {
+            lua_exec!(c.clone(), "return nvi_win.next()").await.unwrap();
+            sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        for _ in 0..7 {
+            lua_exec!(c.clone(), "return nvi_win.prev()").await.unwrap();
+            sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        Ok(())
+    });
 
     d
 }

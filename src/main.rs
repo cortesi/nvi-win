@@ -23,6 +23,13 @@ struct NviWin {
 }
 
 #[nvi_plugin]
+/// A window navigation plugin.
+///
+/// This pulugin ignores non-floating window with `focusable` set to false. This makes non-floating
+/// interface panes possible, and opens new avenues to explore for plugin interfaces. See the
+/// following neovim tracking issue for more information:
+///
+/// https://github.com/neovim/neovim/issues/29365
 impl NviWin {
     fn new() -> Self {
         NviWin {
@@ -60,17 +67,13 @@ impl NviWin {
         Ok(())
     }
 
-    /// Get the list of windows we need to choose from. Exclude the current window and
-    /// floating windows.
+    /// Get the list of windows we need to choose from. Exclude floating windows, and windows with
+    /// focusable set to false. Windows are returned in layout order.
     async fn windows(&self, client: &mut nvi::Client) -> nvi::error::Result<Vec<Window>> {
-        let current = client.nvim.get_current_win().await?;
         let mut ret = vec![];
         for w in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
-            if w == current {
-                continue;
-            }
             let cnf = client.nvim.win_get_config(&w).await?;
-            if cnf.relative.is_some() {
+            if cnf.focusable == Some(false) || cnf.relative.is_some() {
                 continue;
             }
             ret.push(w);
@@ -78,12 +81,19 @@ impl NviWin {
         Ok(ret)
     }
 
-    /// Pick a window, and return the window ID. If there's only one window, return that window.
-    /// Otherwise, display an overlay and ask the user for input. If the user presses any key not
-    /// in our shortcut list, cancel the pick operation and return None.
+    /// Pick a window, and return the window ID. If there's only one window, return that window
+    /// immediately. Otherwise, display an overlay and ask the user for input. If the user presses
+    /// any key not in our shortcut list, cancel the pick operation and return None.
     #[request]
     async fn pick(&mut self, client: &mut nvi::Client) -> nvi::error::Result<Option<Window>> {
-        let windows = self.windows(client).await?;
+        let current = client.nvim.get_current_win().await?;
+        let windows = self
+            .windows(client)
+            .await?
+            .into_iter()
+            .filter(|w| *w != current)
+            .collect::<Vec<_>>();
+
         self.show_hints(client, &windows).await?;
         let c = input::get_keypress(client).await?;
 
@@ -108,6 +118,28 @@ impl NviWin {
         if let Some(window) = self.pick(client).await? {
             client.nvim.set_current_win(&window).await?;
         }
+        Ok(())
+    }
+
+    /// Go to the next window, using the layout order of windows, wrapping if needed.
+    #[request]
+    async fn next(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        let windows = self.windows(client).await?;
+        let current = client.nvim.get_current_win().await?;
+        let offset = windows.iter().position(|w| *w == current).unwrap();
+        let next = windows[(offset + 1) % windows.len()].clone();
+        client.nvim.set_current_win(&next).await?;
+        Ok(())
+    }
+
+    /// Go to the previous window, using the layout order of windows, wrapping if needed.
+    #[request]
+    async fn prev(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        let windows = self.windows(client).await?;
+        let current = client.nvim.get_current_win().await?;
+        let offset = windows.iter().position(|w| *w == current).unwrap();
+        let prev = windows[(offset + windows.len() - 1) % windows.len()].clone();
+        client.nvim.set_current_win(&prev).await?;
         Ok(())
     }
 }
