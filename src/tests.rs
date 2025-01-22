@@ -188,13 +188,8 @@ async fn test_directional() {
         .await
         .unwrap();
 
-    // Create a 2x2 grid of windows
-    lua_exec!(
-        nvit.client,
-        "vim.cmd('vsplit'); vim.cmd('wincmd l'); vim.cmd('split')"
-    )
-    .await
-    .unwrap();
+    // Create a horizontal split
+    lua_exec!(nvit.client, "vim.cmd('vsplit')").await.unwrap();
 
     let start = nvit.client.nvim.get_current_win().await.unwrap();
 

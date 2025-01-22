@@ -197,35 +197,48 @@ impl NviWin {
         Ok(())
     }
 
-    /// Go to the next window in the layout order, wrapping if needed.
-    #[request]
-    async fn next(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    /// Helper function to get current window index and window list
+    async fn get_window_info(
+        &self,
+        client: &mut nvi::Client,
+    ) -> nvi::error::Result<(usize, Vec<Window>)> {
         let windows = self.windows(client).await?;
         let current = client.nvim.get_current_win().await?;
         let offset = windows.iter().position(|w| *w == current).unwrap();
-        let next = windows[(offset + 1) % windows.len()].clone();
-        client.nvim.set_current_win(&next).await?;
+        Ok((offset, windows))
+    }
+
+    /// Helper function to move to a target window
+    async fn move_to_window(
+        &self,
+        client: &mut nvi::Client,
+        window: &Window,
+    ) -> nvi::error::Result<()> {
+        client.nvim.set_current_win(window).await?;
         Ok(())
+    }
+
+    /// Go to the next window in the layout order, wrapping if needed.
+    #[request]
+    async fn next(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        let (offset, windows) = self.get_window_info(client).await?;
+        let next = windows[(offset + 1) % windows.len()].clone();
+        self.move_to_window(client, &next).await
     }
 
     /// Go to the previous window in the layout order, wrapping if needed.
     #[request]
     async fn prev(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
-        let windows = self.windows(client).await?;
-        let current = client.nvim.get_current_win().await?;
-        let offset = windows.iter().position(|w| *w == current).unwrap();
+        let (offset, windows) = self.get_window_info(client).await?;
         let prev = windows[(offset + windows.len() - 1) % windows.len()].clone();
-        client.nvim.set_current_win(&prev).await?;
-        Ok(())
+        self.move_to_window(client, &prev).await
     }
 
     async fn move_to_dir(&mut self, dir: Dir, client: &mut nvi::Client) -> nvi::error::Result<()> {
-        let windows = self.windows(client).await?;
-        let current = client.nvim.get_current_win().await?;
+        let (offset, windows) = self.get_window_info(client).await?;
         let geoms = self.geoms(client, &windows).await?;
-        let offset = windows.iter().position(|w| *w == current).unwrap();
         if let Some(idx) = find_dir(dir, offset, &geoms) {
-            client.nvim.set_current_win(&windows[idx]).await?;
+            self.move_to_window(client, &windows[idx]).await?;
         }
         Ok(())
     }
