@@ -14,12 +14,9 @@ pub fn demos() -> Demos {
         Ok(())
     });
     d.add("cycle", |c| async move {
-        lua_exec!(
-            c.clone(),
-            "vim.cmd('vsplit'); vim.cmd('split'); vim.cmd('vsplit')"
-        )
-        .await
-        .unwrap();
+        lua_exec!(c, "vim.cmd('vsplit'); vim.cmd('split'); vim.cmd('vsplit')")
+            .await
+            .unwrap();
         for _ in 0..5 {
             let c2 = c.clone();
             tokio::spawn(async move {
@@ -43,13 +40,13 @@ pub fn demos() -> Demos {
         .unwrap();
 
         for _ in 0..7 {
-            lua_exec!(c.clone(), "return nvi_win.next()").await.unwrap();
             sleep(std::time::Duration::from_secs(1)).await;
+            lua_exec!(c, "return nvi_win.next()").await.unwrap();
         }
 
         for _ in 0..7 {
-            lua_exec!(c.clone(), "return nvi_win.prev()").await.unwrap();
             sleep(std::time::Duration::from_secs(1)).await;
+            lua_exec!(c, "return nvi_win.prev()").await.unwrap();
         }
 
         Ok(())

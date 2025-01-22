@@ -17,6 +17,69 @@ const DEFAULT_KEYS: &str = "asdfghjklqwertyuiopzxcvbnm";
 const FLOAT_WIDTH: usize = 7;
 const FLOAT_HEIGHT: usize = 3;
 
+enum Dir {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// Find the next window in the given direction. Directions are calculated relative to the top-left
+/// corner of the window. If there is no window in the given direction, return None. The window
+/// layout may have gaps and overlaps.
+///
+/// `current` is the index of the current window in the `geoms` vector.
+/// `geoms` is a slice of tuples containing the geometry of each window in the layout as (x, y,
+/// width, height) tuples, with x and y being the coordinates of the top-left corner of the window.
+fn find_dir(dir: Dir, current: usize, geoms: &[(i64, i64, i64, i64)]) -> Option<usize> {
+    let &(curr_x, curr_y, curr_w, curr_h) = geoms.get(current)?;
+    let curr_right = curr_x + curr_w;
+    let curr_bottom = curr_y + curr_h;
+
+    let mut candidates = Vec::new();
+
+    for (i, &(x, y, w, h)) in geoms.iter().enumerate() {
+        if i == current {
+            continue;
+        }
+
+        let right = x + w;
+        let bottom = y + h;
+
+        match dir {
+            Dir::Right => {
+                if x > curr_x && ranges_overlap(curr_y, curr_bottom, y, bottom) {
+                    candidates.push((i, x - curr_right));
+                }
+            }
+            Dir::Left => {
+                if right < curr_right && ranges_overlap(curr_y, curr_bottom, y, bottom) {
+                    candidates.push((i, curr_x - right));
+                }
+            }
+            Dir::Down => {
+                if y > curr_y && ranges_overlap(curr_x, curr_right, x, right) {
+                    candidates.push((i, y - curr_bottom));
+                }
+            }
+            Dir::Up => {
+                if bottom < curr_bottom && ranges_overlap(curr_x, curr_right, x, right) {
+                    candidates.push((i, curr_y - bottom));
+                }
+            }
+        }
+    }
+
+    // Sort by distance and return the closest window
+    candidates.sort_by_key(|&(_, dist)| dist);
+    candidates.first().map(|&(idx, _)| idx)
+}
+
+/// Returns true if two ranges [start1, end1) and [start2, end2) overlap.
+fn ranges_overlap(start1: i64, end1: i64, start2: i64, end2: i64) -> bool {
+    start1 < end2 && start2 < end1
+}
+
 struct NviWin {
     keys: Vec<String>,
     panes: Vec<pane::Pane>,
@@ -25,9 +88,9 @@ struct NviWin {
 #[nvi_plugin]
 /// A window navigation plugin.
 ///
-/// This pulugin ignores non-floating window with `focusable` set to false. This makes non-floating
-/// interface panes possible, and opens new avenues to explore for plugin interfaces. See the
-/// following neovim tracking issue for more information:
+/// A key feature of the plugin is the fact that it ignores non-floating windows with `focusable`
+/// set to false. This makes non-floating interface panes for plugins possible. See the following
+/// neovim tracking issue for more information:
 ///
 /// https://github.com/neovim/neovim/issues/29365
 impl NviWin {
@@ -81,9 +144,22 @@ impl NviWin {
         Ok(ret)
     }
 
-    /// Pick a window, and return the window ID. If there's only one window, return that window
-    /// immediately. Otherwise, display an overlay and ask the user for input. If the user presses
-    /// any key not in our shortcut list, cancel the pick operation and return None.
+    #[allow(dead_code)]
+    pub async fn geoms(
+        &self,
+        client: &mut nvi::Client,
+        windows: &[Window],
+    ) -> nvi::error::Result<Vec<(i64, i64, i64, i64)>> {
+        let mut ret = vec![];
+        for w in windows {
+            ret.push(w.geom(client).await?);
+        }
+        Ok(ret)
+    }
+
+    /// Visually pick a window, and return the window ID. If there's only one window, return that
+    /// window immediately. Otherwise, display an overlay and ask the user for input. If the user
+    /// presses any key not in our shortcut list, cancel the pick operation and return None.
     #[request]
     async fn pick(&mut self, client: &mut nvi::Client) -> nvi::error::Result<Option<Window>> {
         let current = client.nvim.get_current_win().await?;
@@ -121,7 +197,7 @@ impl NviWin {
         Ok(())
     }
 
-    /// Go to the next window, using the layout order of windows, wrapping if needed.
+    /// Go to the next window in the layout order, wrapping if needed.
     #[request]
     async fn next(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
         let windows = self.windows(client).await?;
@@ -132,7 +208,7 @@ impl NviWin {
         Ok(())
     }
 
-    /// Go to the previous window, using the layout order of windows, wrapping if needed.
+    /// Go to the previous window in the layout order, wrapping if needed.
     #[request]
     async fn prev(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
         let windows = self.windows(client).await?;
@@ -141,6 +217,41 @@ impl NviWin {
         let prev = windows[(offset + windows.len() - 1) % windows.len()].clone();
         client.nvim.set_current_win(&prev).await?;
         Ok(())
+    }
+
+    async fn move_to_dir(&mut self, dir: Dir, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        let windows = self.windows(client).await?;
+        let current = client.nvim.get_current_win().await?;
+        let geoms = self.geoms(client, &windows).await?;
+        let offset = windows.iter().position(|w| *w == current).unwrap();
+        if let Some(idx) = find_dir(dir, offset, &geoms) {
+            client.nvim.set_current_win(&windows[idx]).await?;
+        }
+        Ok(())
+    }
+
+    /// Go to the window to the left of the current window.
+    #[request]
+    async fn left(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        self.move_to_dir(Dir::Left, client).await
+    }
+
+    /// Go to the window to the right of the current window.
+    #[request]
+    async fn right(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        self.move_to_dir(Dir::Right, client).await
+    }
+
+    /// Go to the window above the current window.
+    #[request]
+    async fn up(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        self.move_to_dir(Dir::Up, client).await
+    }
+
+    /// Go to the window below the current window.
+    #[request]
+    async fn down(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+        self.move_to_dir(Dir::Down, client).await
     }
 }
 
