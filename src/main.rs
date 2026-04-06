@@ -1,6 +1,8 @@
-use anyhow::Result;
+//! Window navigation plugin for Neovim.
 
 use nvi::{
+    cmd,
+    error::Result,
     highlights::*,
     input,
     nvi_macros::*,
@@ -9,18 +11,28 @@ use nvi::{
     Color,
 };
 
+/// Demos for the plugin.
 mod demos;
 #[cfg(test)]
 mod tests;
 
+/// Default keys to use for window hints.
 const DEFAULT_KEYS: &str = "asdfghjklqwertyuiopzxcvbnm";
+/// Width of the floating window hint.
 const FLOAT_WIDTH: usize = 7;
+/// Height of the floating window hint.
 const FLOAT_HEIGHT: usize = 3;
 
+/// Direction to move focus.
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum Dir {
+    /// Left
     Left,
+    /// Right
     Right,
+    /// Up
     Up,
+    /// Down
     Down,
 }
 
@@ -80,8 +92,11 @@ fn ranges_overlap(start1: i64, end1: i64, start2: i64, end2: i64) -> bool {
     start1 < end2 && start2 < end1
 }
 
+/// The window navigation plugin state.
 struct NviWin {
+    /// The keys to use for window hints.
     keys: Vec<String>,
+    /// The currently active hint panes.
     panes: Vec<pane::Pane>,
 }
 
@@ -94,25 +109,24 @@ struct NviWin {
 ///
 /// https://github.com/neovim/neovim/issues/29365
 impl NviWin {
-    fn new() -> Self {
-        NviWin {
+    /// Create a new NviWin instance.
+    pub fn new() -> Self {
+        Self {
             keys: DEFAULT_KEYS.chars().map(|c| c.to_string()).collect(),
             panes: vec![],
         }
     }
 
-    fn highlights(&self) -> nvi::error::Result<Highlights> {
+    /// Register highlights.
+    fn highlights(&self) -> Result<Highlights> {
         Ok(Highlights::default().hl(
             "Window",
             Hl::default().fg(Color::White)?.bg(Color::AzureBlue)?,
         ))
     }
 
-    async fn show_hints(
-        &mut self,
-        client: &mut nvi::Client,
-        windows: &[Window],
-    ) -> nvi::error::Result<()> {
+    /// Show window hints.
+    async fn show_hints(&mut self, client: &mut nvi::Client, windows: &[Window]) -> Result<()> {
         for (i, w) in windows.iter().enumerate() {
             let key = self.keys[i].clone();
 
@@ -131,8 +145,8 @@ impl NviWin {
     }
 
     /// Get the list of windows we need to choose from. Exclude floating windows, and windows with
-    /// focusable set to false. Windows are returned in layout order.
-    async fn windows(&self, client: &mut nvi::Client) -> nvi::error::Result<Vec<Window>> {
+    /// `focusable` set to false. Windows are returned in layout order.
+    async fn windows(&self, client: &nvi::Client) -> Result<Vec<Window>> {
         let mut ret = vec![];
         for w in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
             let cnf = client.nvim.win_get_config(&w).await?;
@@ -144,12 +158,13 @@ impl NviWin {
         Ok(ret)
     }
 
+    /// Get geometry for a list of windows.
     #[allow(dead_code)]
     pub async fn geoms(
         &self,
-        client: &mut nvi::Client,
+        client: &nvi::Client,
         windows: &[Window],
-    ) -> nvi::error::Result<Vec<(i64, i64, i64, i64)>> {
+    ) -> Result<Vec<(i64, i64, i64, i64)>> {
         let mut ret = vec![];
         for w in windows {
             ret.push(w.geom(client).await?);
@@ -161,7 +176,7 @@ impl NviWin {
     /// window immediately. Otherwise, display an overlay and ask the user for input. If the user
     /// presses any key not in our shortcut list, cancel the pick operation and return None.
     #[request]
-    async fn pick(&mut self, client: &mut nvi::Client) -> nvi::error::Result<Option<Window>> {
+    async fn pick(&mut self, client: &mut nvi::Client) -> Result<Option<Window>> {
         let current = client.nvim.get_current_win().await?;
         let windows = self
             .windows(client)
@@ -190,7 +205,7 @@ impl NviWin {
 
     /// Pick a window and jump to it.
     #[request]
-    async fn jump(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn jump(&mut self, client: &mut nvi::Client) -> Result<()> {
         if let Some(window) = self.pick(client).await? {
             client.nvim.set_current_win(&window).await?;
         }
@@ -198,10 +213,7 @@ impl NviWin {
     }
 
     /// Helper function to get current window index and window list
-    async fn get_window_info(
-        &self,
-        client: &mut nvi::Client,
-    ) -> nvi::error::Result<(usize, Vec<Window>)> {
+    async fn get_window_info(&self, client: &nvi::Client) -> Result<(usize, Vec<Window>)> {
         let windows = self.windows(client).await?;
         let current = client.nvim.get_current_win().await?;
         let offset = windows.iter().position(|w| *w == current).unwrap();
@@ -209,18 +221,14 @@ impl NviWin {
     }
 
     /// Helper function to move to a target window
-    async fn move_to_window(
-        &self,
-        client: &mut nvi::Client,
-        window: &Window,
-    ) -> nvi::error::Result<()> {
+    async fn move_to_window(&self, client: &nvi::Client, window: &Window) -> Result<()> {
         client.nvim.set_current_win(window).await?;
         Ok(())
     }
 
     /// Go to the next window in the layout order, wrapping if needed.
     #[request]
-    async fn next(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn next(&self, client: &nvi::Client) -> Result<()> {
         let (offset, windows) = self.get_window_info(client).await?;
         let next = windows[(offset + 1) % windows.len()].clone();
         self.move_to_window(client, &next).await
@@ -228,13 +236,14 @@ impl NviWin {
 
     /// Go to the previous window in the layout order, wrapping if needed.
     #[request]
-    async fn prev(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn prev(&self, client: &nvi::Client) -> Result<()> {
         let (offset, windows) = self.get_window_info(client).await?;
         let prev = windows[(offset + windows.len() - 1) % windows.len()].clone();
         self.move_to_window(client, &prev).await
     }
 
-    async fn move_to_dir(&mut self, dir: Dir, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    /// Move focus to the window in the given direction.
+    async fn move_to_dir(&self, dir: Dir, client: &nvi::Client) -> Result<()> {
         let (offset, windows) = self.get_window_info(client).await?;
         let geoms = self.geoms(client, &windows).await?;
         if let Some(idx) = find_dir(dir, offset, &geoms) {
@@ -245,31 +254,31 @@ impl NviWin {
 
     /// Go to the window to the left of the current window.
     #[request]
-    async fn left(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn left(&self, client: &nvi::Client) -> Result<()> {
         self.move_to_dir(Dir::Left, client).await
     }
 
     /// Go to the window to the right of the current window.
     #[request]
-    async fn right(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn right(&self, client: &nvi::Client) -> Result<()> {
         self.move_to_dir(Dir::Right, client).await
     }
 
     /// Go to the window above the current window.
     #[request]
-    async fn up(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn up(&self, client: &nvi::Client) -> Result<()> {
         self.move_to_dir(Dir::Up, client).await
     }
 
     /// Go to the window below the current window.
     #[request]
-    async fn down(&mut self, client: &mut nvi::Client) -> nvi::error::Result<()> {
+    async fn down(&self, client: &nvi::Client) -> Result<()> {
         self.move_to_dir(Dir::Down, client).await
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    nvi::cmd::run(NviWin::new(), Some(demos::demos())).await?;
+async fn main() -> anyhow::Result<()> {
+    cmd::run(NviWin::new(), Some(demos::demos())).await?;
     Ok(())
 }

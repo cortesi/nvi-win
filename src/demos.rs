@@ -1,9 +1,9 @@
+use std::time::Duration;
+
+use nvi::{demo::Demos, input::feedkeys, lua_exec};
 use tokio::time::sleep;
 
-use nvi::demo::Demos;
-use nvi::input::feedkeys;
-use nvi::lua_exec;
-
+/// Register the demos for the plugin.
 pub fn demos() -> Demos {
     let mut d = Demos::new();
     d.add("startup", |c| async move {
@@ -24,7 +24,7 @@ pub fn demos() -> Demos {
                     .await
                     .unwrap();
             });
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
             let keys = ['a', 's', 'd'];
             let key = keys[rand::random::<usize>() % 3];
             feedkeys(&c, &key.to_string()).await.unwrap();
@@ -40,12 +40,12 @@ pub fn demos() -> Demos {
         .unwrap();
 
         for _ in 0..7 {
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
             lua_exec!(c, "return nvi_win.next()").await.unwrap();
         }
 
         for _ in 0..7 {
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
             lua_exec!(c, "return nvi_win.prev()").await.unwrap();
         }
 
