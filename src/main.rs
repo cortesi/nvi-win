@@ -148,12 +148,12 @@ impl NviWin {
     /// `focusable` set to false. Windows are returned in layout order.
     async fn windows(&self, client: &nvi::Client) -> Result<Vec<Window>> {
         let mut ret = vec![];
-        for w in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
-            let cnf = client.nvim.win_get_config(&w).await?;
+        for window in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
+            let cnf = client.nvim.win_get_config(&window).await?;
             if cnf.focusable == Some(false) || cnf.relative.is_some() {
                 continue;
             }
-            ret.push(w);
+            ret.push(window);
         }
         Ok(ret)
     }
