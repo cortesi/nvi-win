@@ -1,14 +1,13 @@
 //! Window navigation plugin for Neovim.
 
 use nvi::{
-    cmd,
+    Color, cmd,
     error::Result,
     highlights::*,
     input,
     nvi_macros::*,
     nvim::types::{TabPage, Window},
     ui::pane,
-    Color,
 };
 
 /// Demos for the plugin.
@@ -36,13 +35,14 @@ enum Dir {
     Down,
 }
 
-/// Find the next window in the given direction. Directions are calculated relative to the top-left
-/// corner of the window. If there is no window in the given direction, return None. The window
-/// layout may have gaps and overlaps.
+/// Find the next window in the given direction. Directions are calculated
+/// relative to the top-left corner of the window. If there is no window in the
+/// given direction, return None. The window layout may have gaps and overlaps.
 ///
 /// `current` is the index of the current window in the `geoms` vector.
-/// `geoms` is a slice of tuples containing the geometry of each window in the layout as (x, y,
-/// width, height) tuples, with x and y being the coordinates of the top-left corner of the window.
+/// `geoms` is a slice of tuples containing the geometry of each window in the
+/// layout as (x, y, width, height) tuples, with x and y being the coordinates
+/// of the top-left corner of the window.
 fn find_dir(dir: Dir, current: usize, geoms: &[(i64, i64, i64, i64)]) -> Option<usize> {
     let &(curr_x, curr_y, curr_w, curr_h) = geoms.get(current)?;
     let curr_right = curr_x + curr_w;
@@ -103,9 +103,10 @@ struct NviWin {
 #[nvi_plugin]
 /// A window navigation plugin.
 ///
-/// A key feature of the plugin is the fact that it ignores non-floating windows with `focusable`
-/// set to false. This makes non-floating interface panes for plugins possible. See the following
-/// neovim tracking issue for more information:
+/// A key feature of the plugin is the fact that it ignores non-floating windows
+/// with `focusable` set to false. This makes non-floating interface panes for
+/// plugins possible. See the following neovim tracking issue for more
+/// information:
 ///
 /// https://github.com/neovim/neovim/issues/29365
 impl NviWin {
@@ -144,8 +145,9 @@ impl NviWin {
         Ok(())
     }
 
-    /// Get the list of windows we need to choose from. Exclude floating windows, and windows with
-    /// `focusable` set to false. Windows are returned in layout order.
+    /// Get the list of windows we need to choose from. Exclude floating
+    /// windows, and windows with `focusable` set to false. Windows are
+    /// returned in layout order.
     async fn windows(&self, client: &nvi::Client) -> Result<Vec<Window>> {
         let mut ret = vec![];
         for window in client.nvim.tabpage_list_wins(&TabPage::current()).await? {
@@ -172,9 +174,10 @@ impl NviWin {
         Ok(ret)
     }
 
-    /// Visually pick a window, and return the window ID. If there's only one window, return that
-    /// window immediately. Otherwise, display an overlay and ask the user for input. If the user
-    /// presses any key not in our shortcut list, cancel the pick operation and return None.
+    /// Visually pick a window, and return the window ID. If there's only one
+    /// window, return that window immediately. Otherwise, display an
+    /// overlay and ask the user for input. If the user presses any key not
+    /// in our shortcut list, cancel the pick operation and return None.
     #[request]
     async fn pick(&mut self, client: &mut nvi::Client) -> Result<Option<Window>> {
         let current = client.nvim.get_current_win().await?;

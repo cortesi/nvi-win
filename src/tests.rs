@@ -1,7 +1,7 @@
 use futures_util::future::FutureExt;
 use nvi::{lua, lua_exec, test::NviTest};
 
-use crate::{find_dir, Dir, NviWin};
+use crate::{Dir, NviWin, find_dir};
 
 #[tokio::test]
 async fn find_dir_basic() {
